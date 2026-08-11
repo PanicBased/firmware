@@ -221,6 +221,28 @@ void Wardriving::beginDashboard() {
     server.on("/status", HTTP_GET, [this](AsyncWebServerRequest *request) {
         request->send(200, "application/json", dashboardJson());
     });
+    server.on("/csv", HTTP_GET, [this](AsyncWebServerRequest *request) {
+        FS *fs;
+        if (!getFsStorage(fs) || filename.isEmpty()) {
+            request->send(404, "text/plain", "no session file yet");
+            return;
+        }
+        File f = (*fs).open("/BruceWardriving/" + filename, FILE_READ);
+        if (!f) {
+            request->send(404, "text/plain", "file not found");
+            return;
+        }
+        AsyncWebServerResponse *response = request->beginResponse(
+            "text/csv", f.size(),
+            [f](uint8_t *buffer, size_t maxLen, size_t alreadySent) mutable {
+                size_t n = f.read(buffer, maxLen);
+                if (n == 0) f.close();
+                return n;
+            }
+        );
+        response->addHeader("Content-Disposition", "attachment; filename=\"" + filename + "\"");
+        request->send(response);
+    });
     server.begin();
     dashboardReady = true;
 }
@@ -246,16 +268,29 @@ String Wardriving::dashboardHtml() {
            ".alert{position:relative;z-index:1;min-height:34px;text-align:center;font-size:15px;color:var(--cyan);padding:8px;border:1px solid rgba(34,224,255,.4);border-radius:8px;margin:10px 0;background:rgba(11,3,32,.5)}"
            ".alert.flash{animation:blink .6s step-end 3}"
            "@keyframes blink{50%{background:var(--cyan);color:#12002b}}"
-           "table{position:relative;z-index:1;width:100%;border-collapse:collapse;margin-top:10px;font-size:15px;background:rgba(11,3,32,.45);border:1px solid rgba(34,224,255,.25);border-radius:8px;overflow:hidden}"
-           "td{padding:7px 8px;border-bottom:1px solid rgba(255,45,120,.18)}"
-           "td:first-child{color:var(--dim);letter-spacing:2px}"
-           "td:nth-child(2){text-align:right;color:#fff}"
-           "a{color:var(--cyan);text-decoration:none}"
-           ".recent{position:relative;z-index:1;margin-top:12px;border:1px solid rgba(255,45,120,.35);border-radius:8px;padding:10px;background:rgba(11,3,32,.45)}"
-           ".recent h2{color:var(--cyan);font-size:12px;letter-spacing:3px;margin-bottom:6px}"
-           ".recent div{font-size:13px;color:var(--pink);padding:3px 0;border-bottom:1px dashed rgba(255,45,120,.3)}"
-           ".recent div:last-child{border-bottom:none}"
-           ".foot{position:relative;z-index:1;text-align:center;color:var(--dim);font-size:11px;letter-spacing:3px;margin-top:16px}"
+            ".grid{position:relative;z-index:1;display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:10px}"
+            ".card{border:1px solid rgba(34,224,255,.35);border-radius:8px;padding:7px 9px;background:rgba(11,3,32,.5)}"
+            ".card .k{color:var(--dim);font-size:9px;letter-spacing:2px}"
+            ".card .v{color:#fff;font-size:15px;margin-top:3px;word-break:break-word}"
+            ".card.map{grid-column:1/-1}"
+            ".card .v a{color:var(--cyan)}"
+            "a{color:var(--cyan);text-decoration:none}"
+            ".hitsbox{position:relative;z-index:1;margin-top:14px;border:1px solid rgba(255,45,120,.35);border-radius:8px;overflow:hidden;background:rgba(11,3,32,.5)}"
+            ".hitsbox .bar{display:flex;justify-content:space-between;align-items:center;padding:9px 10px;border-bottom:1px solid rgba(255,45,120,.3)}"
+            ".hitsbox .bar b{color:var(--cyan);font-size:12px;letter-spacing:3px}"
+            ".hitsbox .bar span{color:var(--pink);font-size:13px}"
+            ".hitsbox .scroll{max-height:330px;overflow-y:auto;-webkit-overflow-scrolling:touch}"
+            "table{width:100%;border-collapse:collapse;font-size:12px}"
+            "th{color:var(--dim);text-align:left;font-weight:400;letter-spacing:2px;padding:6px 8px;font-size:9px;border-bottom:1px solid rgba(255,45,120,.25);position:sticky;top:0;background:#05021a}"
+            "td{padding:6px 8px;border-bottom:1px solid rgba(255,45,120,.14);color:#ffe3ee}"
+            "td.t{color:var(--dim);font-size:10px}"
+            "td.k{color:var(--cyan)}"
+            "td.r{color:var(--pink)}"
+            "tr.flash{animation:rowflash .6s step-end 2}"
+            "@keyframes rowflash{50%{background:rgba(34,224,255,.22)}}"
+            ".dl{display:block;position:relative;z-index:1;text-align:center;margin-top:14px;padding:12px;border:1px solid var(--cyan);border-radius:8px;background:rgba(11,3,32,.5);color:var(--cyan);letter-spacing:2px;font-size:13px;text-decoration:none}"
+            ".dl:active{background:var(--cyan);color:#12002b}"
+            ".foot{position:relative;z-index:1;text-align:center;color:var(--dim);font-size:11px;letter-spacing:3px;margin-top:16px}"
            ".foot .cur{animation:blink2 1s step-end infinite}"
            "@keyframes blink2{50%{opacity:0}}"
            "</style></head><body>"
@@ -264,32 +299,28 @@ String Wardriving::dashboardHtml() {
            "<div class=\"head\"><h1>PANICflock</h1><span class=\"chan\">SECTOR SCAN</span></div>"
            "<div class=\"hits\"><div class=\"num\" id=\"hits\">--</div><div class=\"lab\">SIGHTINGS</div></div>"
            "<div class=\"alert\" id=\"alert\">acquiring signal...</div>"
-           "<table id=\"t\"></table>"
-           "<div class=\"recent\"><h2>RECENT HITS</h2><div id=\"recent\">none</div></div>"
-           "<div class=\"foot\"><span class=\"cur\">&#9617;</span> WARDEN ONLINE <span class=\"cur\">&#9617;</span></div>"
+            "<div class=\"grid\" id=\"g\"></div>"
+            "<div class=\"hitsbox\"><div class=\"bar\"><b>CONFIRMED SIGHTINGS</b><span id=\"hcount\">0</span></div><div class=\"scroll\"><table><thead><tr><th>TIME</th><th>TYPE</th><th>DEVICE</th><th>MAC</th><th>RSSI</th><th>COORDS</th></tr></thead><tbody id=\"t\"></tbody></table></div></div>"
+            "<a class=\"dl\" href=\"/csv\" download>DOWNLOAD SESSION CSV</a>"
+            "<div class=\"foot\"><span class=\"cur\">&#9617;</span> WARDEN ONLINE <span class=\"cur\">&#9617;</span></div>"
            "</div>"
            "<script>"
            "function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}"
            "function load(){fetch('/status').then(r=>r.json()).then(function(d){"
-           "document.getElementById('hits').textContent=d.hits;"
+            "document.getElementById('hits').textContent=d.count;"
            "var a=document.getElementById('alert');"
            "a.textContent=d.last?('ALERT :: '+d.last):'no hits yet';"
            "if(d.new){a.classList.add('flash');if(navigator.vibrate&&d.vibrate)navigator.vibrate([90,60,140]);setTimeout(function(){a.classList.remove('flash')},2000)}"
-           "var h='';"
-           "h+='<tr><td>LAT</td><td>'+d.lat+'</td></tr>';"
-           "h+='<tr><td>LON</td><td>'+d.lon+'</td></tr>';"
-           "h+='<tr><td>FIX / SATS</td><td>'+(d.fix?'FIX':'NO FIX')+' / '+d.sats+'</td></tr>';"
-           "h+='<tr><td>SPEED</td><td>'+d.speed+' km/h</td></tr>';"
-           "h+='<tr><td>DISTANCE</td><td>'+d.distance+' km</td></tr>';"
-           "h+='<tr><td>SESSION</td><td>'+d.time+'</td></tr>';"
-           "h+='<tr><td>LAST RSSI</td><td>'+(d.rssi?d.rssi+' dBm':'--')+'</td></tr>';"
-            "h+='<tr><td>WIFI / BLE</td><td>'+d.wifi+' / '+d.ble+'</td></tr>';"
-            "h+='<tr><td>NEXT SCAN</td><td>'+d.nextScan+'s / '+(d.mode==='COMMS'?'4s':'1s')+'</td></tr>';"
-           "h+='<tr><td>MAP</td><td><a href=\"https://www.google.com/maps?q='+d.lat+','+d.lon+'\" target=\"_blank\">OPEN &#8599;</a></td></tr>';"
-           "document.getElementById('t').innerHTML=h;"
-           "var r='';"
-           "for(var i=0;i<d.recent.length;i++){r+='<div>'+esc(d.recent[i])+'</div>'}"
-           "document.getElementById('recent').innerHTML=r||'none';"
+            "var m=[['LAT',d.lat],['LON',d.lon],['FIX / SATS',(d.fix?'FIX':'NO FIX')+' / '+d.sats],['SPEED',d.speed+' km/h'],['DISTANCE',d.distance+' km'],['SESSION',d.time],['LAST RSSI',d.rssi?d.rssi+' dBm':'--'],['WIFI / BLE',d.wifi+' / '+d.ble],['NEXT SCAN',d.nextScan+'s / '+(d.mode==='COMMS'?'4s':'1s')]];"
+            "var c='';"
+            "for(var j=0;j<m.length;j++){c+='<div class=\"card\"><div class=\"k\">'+m[j][0]+'</div><div class=\"v\">'+m[j][1]+'</div></div>'}"
+            "c+='<div class=\"card map\"><div class=\"k\">MAP</div><div class=\"v\"><a href=\"https://www.google.com/maps?q='+d.lat+','+d.lon+'\" target=\"_blank\">OPEN &#8599;</a></div></div>';"
+            "document.getElementById('g').innerHTML=c;"
+            "var rows='';"
+            "for(var j=0;j<d.hits.length;j++){var q=d.hits[j];rows+='<tr><td class=\"t\">'+q.t+'</td><td class=\"k\">'+esc(q.k)+'</td><td>'+esc(q.n)+'</td><td>'+q.m+'</td><td class=\"r\">'+q.r+'</td><td>'+q.la+' , '+q.lo+'</td></tr>'}"
+            "if(d.new&&d.hits.length){rows=rows.replace('<tr>','<tr class=\"flash\">')}"
+            "document.getElementById('t').innerHTML=rows;"
+            "document.getElementById('hcount').textContent=d.hits.length;"
            "}).catch(function(){document.getElementById('alert').textContent='signal lost - reacquiring';})}"
            "setInterval(load,1000);load();"
            "</script></body></html>";
@@ -314,7 +345,7 @@ String Wardriving::dashboardJson() {
     bool isNew = (cameraCount != lastReportedHits);
     if (isNew) lastReportedHits = cameraCount;
 
-    String json = "{\"hits\":" + String(cameraCount);
+    String json = "{\"count\":" + String(cameraCount);
     json += ",\"new\":" + String(isNew ? "true" : "false");
     json += ",\"vibrate\":" + String(bruceConfig.wardriveVibrate ? "true" : "false");
     json += ",\"last\":\"" + jsonEscape(lastAlert) + "\"";
@@ -335,10 +366,13 @@ String Wardriving::dashboardJson() {
     if (nextScanMs < 0) nextScanMs = 0;
     json += ",\"nextScan\":" + String((nextScanMs + 999) / 1000);
     json += ",\"mode\":\"" + String(WiFi.softAPgetStationNum() > 0 ? "COMMS" : "SPRINT") + "\"";
-    json += ",\"recent\":[";
-    for (size_t i = 0; i < recentAlerts.size(); i++) {
-        if (i) json += ",";
-        json += "\"" + jsonEscape(recentAlerts[i]) + "\"";
+    json += ",\"hits\":[";
+    for (size_t i = hitLog.size(); i > 0; i--) {
+        const CameraHit &h = hitLog[i - 1];
+        if (i != hitLog.size()) json += ",";
+        json += "{\"t\":\"" + h.time + "\",\"k\":\"" + h.kind + "\",\"n\":\"" + jsonEscape(h.name)
+             + "\",\"m\":\"" + h.mac + "\",\"r\":" + String(h.rssi)
+             + ",\"la\":\"" + String(h.lat, 5) + "\",\"lo\":\"" + String(h.lon, 5) + "\"}";
     }
     json += "]}";
     return json;
@@ -843,8 +877,23 @@ void Wardriving::checkForAlert(const String &macAddress, const String &deviceTyp
     lastAlertLat = cur_lat;
     lastAlertLng = cur_lng;
     lastAlertRssi = rssi;
-    recentAlerts.push_back(lastAlert);
-    if (recentAlerts.size() > 5) recentAlerts.erase(recentAlerts.begin());
+
+    CameraHit h;
+    int c = reason.indexOf(':');
+    h.kind = (c > 0) ? reason.substring(0, c) : reason;
+    h.name = deviceName;
+    h.mac = macAddress;
+    h.rssi = rssi;
+    h.lat = cur_lat;
+    h.lon = cur_lng;
+    char tb[9];
+    if (gps.time.isValid())
+        snprintf(tb, sizeof(tb), "%02d:%02d:%02d", gps.time.hour(), gps.time.minute(), gps.time.second());
+    else
+        snprintf(tb, sizeof(tb), "--:--:--");
+    h.time = tb;
+    hitLog.push_back(h);
+    if (hitLog.size() > 30) hitLog.erase(hitLog.begin());
 
     String alertMsg = "ALERT: " + reason;
     if (deviceName.length() > 0) alertMsg += " Name: " + deviceName;

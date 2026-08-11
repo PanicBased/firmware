@@ -17,6 +17,16 @@
 #include <set>
 #include <vector>
 
+struct CameraHit {
+    String kind; // FLOCK / CAM / MAC
+    String name; // SSID or BLE device name
+    String mac;
+    int rssi;
+    double lat;
+    double lon;
+    String time; // HH:MM:SS
+};
+
 class Wardriving {
 public:
     /////////////////////////////////////////////////////////////////////////////////////
@@ -64,7 +74,7 @@ private:
     double lastAlertLng = 0;
     bool dashboardReady = false;  // softAP + web server up
     int lastReportedHits = 0;     // for detecting new alerts between dashboard polls
-    std::vector<String> recentAlerts; // last 5 alerts for the dashboard list
+    std::vector<CameraHit> hitLog; // recent confirmed sightings (newest last)
 
     bool rxPinReleased = false;
 
