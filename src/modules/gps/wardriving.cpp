@@ -524,7 +524,18 @@ void Wardriving::scanWiFiBLE() {
         vTaskDelay(50 / portTICK_PERIOD_MS);
     }
 
-    int networksFound = scanWiFi ? scanWiFiNetworks() : 0;
+    // Throttle WiFi scans so the softAP stays visible to dashboard clients.
+    // Scanning monopolizes the 2.4GHz radio and suppresses AP beacons for its
+    // whole duration; with GPS feeding fixes every second the old code scanned
+    // ~continuously and the AP was effectively invisible.
+    int networksFound = 0;
+    bool wifiScanned = false;
+    if (scanWiFi &&
+        (lastWifiScanMs == 0 || (millis() - lastWifiScanMs >= WIFI_SCAN_INTERVAL_MS))) {
+        lastWifiScanMs = millis();
+        networksFound = scanWiFiNetworks();
+        wifiScanned = true;
+    }
     int bleFound = 0;
     if (networksFound > 0) {
         for (int i = 0; i < networksFound; i++) {
@@ -573,7 +584,7 @@ void Wardriving::scanWiFiBLE() {
         }
     }
     // Free scan results from heap as soon as we finish consuming them
-    if (scanWiFi) {
+    if (scanWiFi && wifiScanned) {
         WiFi.scanDelete();
         vTaskDelay(120 / portTICK_PERIOD_MS);
     }

@@ -52,6 +52,9 @@ private:
     uint32_t macCacheClears = 0;                  // Number of times MAC cache was cleared
     static constexpr size_t MAX_REGISTERED_MACS = 250;
 
+    unsigned long lastWifiScanMs = 0; // last WiFi scan start (AP visibility throttle)
+    static constexpr unsigned long WIFI_SCAN_INTERVAL_MS = 5000; // gap between WiFi scans
+
     // Camera-mapping / dashboard state
     int cameraCount = 0;          // total camera sightings this session
     String lastAlert = "";        // human readable last alert (reason + mac + rssi)
