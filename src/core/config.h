@@ -72,6 +72,14 @@ public:
     EvilPortalPasswordMode evilPortalPasswordMode = FULL_PASSWORD;
     String evilPortalGatewayIp = "172.0.0.1";
 
+    // Wardrive / camera mapping
+    bool wardriveAlert = true;          // master switch for camera alerts
+    bool wardriveAlertFlockOui = true;  // B4:1E:52 = Flock Safety
+    bool wardriveAlertCameraOui = true; // Axis, Hanwha, Avigilon, Mobotix, FLIR...
+    bool wardriveAlertFlockSsid = true; // SSID containing "flock"
+    int wardriveMinRssi = -90;          // ignore weaker signals
+    bool wardriveDashboard = true;      // phone dashboard AP "BruceWardrive"
+
     void setWifiMAC(const String &mac) {
         wifiMAC = mac;
         saveFile(); // opcional, para salvar imediatamente
@@ -206,3 +214,4 @@ public:
 };
 
 #endif
+

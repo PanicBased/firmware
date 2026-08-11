@@ -1,7 +1,6 @@
 #include "config.h"
 #include "mifare_keys_manager.h"
 #include "sd_functions.h"
-#include <algorithm>
 
 JsonDocument BruceConfig::toJson() const {
     JsonDocument jsonDoc;
@@ -58,6 +57,14 @@ JsonDocument BruceConfig::toJson() const {
     _evilWifiEndpoints["gatewayIp"] = evilPortalGatewayIp;
 
     setting["evilWifiPasswordMode"] = evilPortalPasswordMode;
+
+    setting["wardriveAlert"] = wardriveAlert;
+    setting["wardriveAlertFlockOui"] = wardriveAlertFlockOui;
+    setting["wardriveAlertCameraOui"] = wardriveAlertCameraOui;
+    setting["wardriveAlertFlockSsid"] = wardriveAlertFlockSsid;
+    setting["wardriveMinRssi"] = wardriveMinRssi;
+    setting["wardriveDashboard"] = wardriveDashboard;
+
 
     JsonObject _wifi = setting["wifi"].to<JsonObject>();
     for (const auto &pair : wifi) { _wifi[pair.first] = pair.second; }
@@ -348,6 +355,14 @@ void BruceConfig::fromFile(bool checkFS) {
         count++;
         log_e("Fail");
     }
+
+    // Optional wardrive/camera-mapping keys (absent => keep defaults)
+    if (!setting["wardriveAlert"].isNull()) wardriveAlert = setting["wardriveAlert"].as<bool>();
+    if (!setting["wardriveAlertFlockOui"].isNull()) wardriveAlertFlockOui = setting["wardriveAlertFlockOui"].as<bool>();
+    if (!setting["wardriveAlertCameraOui"].isNull()) wardriveAlertCameraOui = setting["wardriveAlertCameraOui"].as<bool>();
+    if (!setting["wardriveAlertFlockSsid"].isNull()) wardriveAlertFlockSsid = setting["wardriveAlertFlockSsid"].as<bool>();
+    if (!setting["wardriveMinRssi"].isNull()) wardriveMinRssi = setting["wardriveMinRssi"].as<int>();
+    if (!setting["wardriveDashboard"].isNull()) wardriveDashboard = setting["wardriveDashboard"].as<bool>();
 
     if (!setting["startupApp"].isNull()) {
         startupApp = setting["startupApp"].as<String>();
@@ -825,15 +840,8 @@ void BruceConfig::validateMifareKeysItems() {
 }
 
 void BruceConfig::addDisabledMenu(String value) {
-    if (std::find(disabledMenus.begin(), disabledMenus.end(), value) != disabledMenus.end()) return;
+    // TODO: check if duplicate
     disabledMenus.push_back(value);
-    saveFile();
-}
-
-void BruceConfig::removeDisabledMenu(String value) {
-    auto it = std::find(disabledMenus.begin(), disabledMenus.end(), value);
-    if (it == disabledMenus.end()) return;
-    disabledMenus.erase(it);
     saveFile();
 }
 
@@ -898,3 +906,4 @@ bool BruceConfig::isValidWebUISession(const String &token) {
     saveFile();
     return true;
 }
+

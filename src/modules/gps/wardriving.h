@@ -51,6 +51,13 @@ private:
     uint32_t macCacheClears = 0;                  // Number of times MAC cache was cleared
     static constexpr size_t MAX_REGISTERED_MACS = 250;
 
+    // Camera-mapping / dashboard state
+    int cameraCount = 0;          // total camera sightings this session
+    String lastAlert = "";        // human readable last alert (reason + mac + rssi)
+    double lastAlertLat = 0;      // coords of last alert
+    double lastAlertLng = 0;
+    bool dashboardReady = false;  // softAP + web server up
+
     bool rxPinReleased = false;
 
     /////////////////////////////////////////////////////////////////////////////////////
@@ -76,9 +83,13 @@ private:
     int scanWiFiNetworks(void);
     void enforceRegisteredMACLimit(void);
     void loadAlertMACs(void);
-    void checkForAlert(const String &macAddress, const String &deviceType, const String &deviceName = "");
+    void checkForAlert(const String &macAddress, const String &deviceType, const String &deviceName, int32_t rssi);
+    void beginDashboard(void);
+    String dashboardHtml(void);
+    String dashboardJson(void);
     String auth_mode_to_string(wifi_auth_mode_t authMode);
     void create_filename(void);
 };
 
 #endif // WAR_DRIVING_H
+

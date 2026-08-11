@@ -7,15 +7,144 @@
  */
 
 #include "wardriving.h"
+#include "core/config.h"
 #include "core/display.h"
 #include "core/mykeyboard.h"
 #include "core/sd_functions.h"
 #include "core/wifi/wifi_common.h"
 #include "current_year.h"
 #include "modules/ble/ble_common.h"
+#include <ESPAsyncWebServer.h>
 #include <cctype>
+#include <cstring>
 
 #define MAX_WAIT 5000
+
+// Camera vendor fingerprints (OUI = first 3 bytes of MAC, format "XX:XX:XX")
+struct CameraOui {
+    const char *prefix;
+    const char *name;
+};
+static const CameraOui cameraOuis[] = {
+    // Flock Safety ALPR
+    {"B4:1E:52", "Flock Safety"},
+    // Axis Communications
+    {"00:40:8C", "Axis"},
+    {"AC:CC:8E", "Axis"},
+    {"B8:A4:4F", "Axis"},
+    {"E8:27:25", "Axis"},
+    // Avigilon (Motorola)
+    {"70:1A:D5", "Avigilon"},
+    // Hanwha (Samsung)
+    {"44:B4:23", "Hanwha"},
+    {"8C:1D:55", "Hanwha"},
+    {"E4:30:22", "Hanwha"},
+    // Mobotix
+    {"00:03:C5", "Mobotix"},
+    // FLIR
+    {"00:13:56", "FLIR"},
+    {"00:40:7F", "FLIR"},
+    {"00:1B:D8", "FLIR"},
+    // Sunell
+    {"00:1C:27", "Sunell"},
+    // GeoVision
+    {"00:13:E2", "GeoVision"},
+    // March Networks
+    {"00:10:BE", "March Networks"},
+    {"00:12:81", "March Networks"},
+    // Shenzhen Bilian (camera OEM modules)
+    {"00:22:3D", "Bilian"},
+    {"40:F2:E9", "Bilian"},
+    {"60:F8:11", "Bilian"},
+    {"64:0B:4A", "Bilian"},
+    {"80:62:0B", "Bilian"},
+    {"88:0F:10", "Bilian"},
+    {"90:55:81", "Bilian"},
+    {"94:82:49", "Bilian"},
+    {"9C:49:62", "Bilian"},
+    {"A0:65:18", "Bilian"},
+    {"B4:04:61", "Bilian"},
+    {"C8:DB:26", "Bilian"},
+    {"CC:33:BB", "Bilian"},
+    {"D0:71:1D", "Bilian"},
+    {"E0:A6:66", "Bilian"},
+    {"F0:9F:C2", "Bilian"},
+    // China Dragon Technology (camera OEM modules)
+    {"00:1D:51", "China Dragon"},
+    {"00:1F:3E", "China Dragon"},
+    {"00:3B:99", "China Dragon"},
+    {"00:5A:39", "China Dragon"},
+    {"00:5D:14", "China Dragon"},
+    {"00:7B:3F", "China Dragon"},
+    {"00:C3:4A", "China Dragon"},
+    {"00:E0:3A", "China Dragon"},
+    {"0C:53:C0", "China Dragon"},
+    {"0C:D4:22", "China Dragon"},
+    {"10:BF:11", "China Dragon"},
+    {"14:EE:3E", "China Dragon"},
+    {"1C:48:33", "China Dragon"},
+    {"20:42:68", "China Dragon"},
+    {"24:6D:9D", "China Dragon"},
+    {"28:50:2B", "China Dragon"},
+    {"2C:7C:0F", "China Dragon"},
+    {"30:55:F8", "China Dragon"},
+    {"34:99:E0", "China Dragon"},
+    {"3C:11:0F", "China Dragon"},
+    {"40:49:80", "China Dragon"},
+    {"48:E2:44", "China Dragon"},
+    {"4C:29:63", "China Dragon"},
+    {"4C:8D:79", "China Dragon"},
+    {"54:28:54", "China Dragon"},
+    {"58:72:D3", "China Dragon"},
+    {"5C:0D:24", "China Dragon"},
+    {"5C:4A:F5", "China Dragon"},
+    {"5C:F4:AB", "China Dragon"},
+    {"60:F2:30", "China Dragon"},
+    {"64:0D:A1", "China Dragon"},
+    {"68:9A:21", "China Dragon"},
+    {"6C:4B:90", "China Dragon"},
+    {"70:24:6A", "China Dragon"},
+    {"74:3C:40", "China Dragon"},
+    {"78:DA:07", "China Dragon"},
+    {"7C:94:5D", "China Dragon"},
+    {"80:6D:97", "China Dragon"},
+    {"84:AF:1F", "China Dragon"},
+    {"88:83:8F", "China Dragon"},
+    {"8C:AB:8E", "China Dragon"},
+    {"90:B4:D1", "China Dragon"},
+    {"94:7E:90", "China Dragon"},
+    {"98:9E:96", "China Dragon"},
+    {"9C:93:4E", "China Dragon"},
+    {"A0:1C:BB", "China Dragon"},
+    {"A4:B1:C1", "China Dragon"},
+    {"A8:B8:34", "China Dragon"},
+    {"AC:61:EA", "China Dragon"},
+    {"B0:A1:B3", "China Dragon"},
+    {"B4:42:8E", "China Dragon"},
+    {"B8:60:E8", "China Dragon"},
+    {"BC:AD:89", "China Dragon"},
+    {"C0:66:B7", "China Dragon"},
+    {"C4:CB:2C", "China Dragon"},
+    {"C8:48:3B", "China Dragon"},
+    {"CC:6F:88", "China Dragon"},
+    {"D0:8C:08", "China Dragon"},
+    {"D4:84:2C", "China Dragon"},
+    {"D8:88:42", "China Dragon"},
+    {"DC:62:D3", "China Dragon"},
+    {"E0:70:6A", "China Dragon"},
+    {"E4:CC:8A", "China Dragon"},
+    {"E8:56:39", "China Dragon"},
+    {"EC:09:99", "China Dragon"},
+    {"F0:1F:45", "China Dragon"},
+    {"F4:21:5C", "China Dragon"},
+    {"F8:8D:77", "China Dragon"},
+    {"FC:2A:9B", "China Dragon"},
+};
+
+// SSID substrings indicating Flock cameras (case-insensitive)
+static const char *cameraSsids[] = {
+    "flock",
+};
 
 static bool parseMacToU64(const String &mac, uint64_t &out) {
     uint64_t value = 0;
@@ -70,8 +199,77 @@ void Wardriving::setup() {
 }
 
 void Wardriving::begin_wifi() {
-    WiFi.mode(WIFI_STA);
-    WiFi.disconnect();
+    if (bruceConfig.wardriveDashboard) {
+        // Phone dashboard mode: AP + station (AP_STA still allows WiFi scans)
+        WiFi.mode(WIFI_AP_STA);
+        WiFi.disconnect();
+        WiFi.softAPConfig(IPAddress(192, 168, 4, 1), IPAddress(192, 168, 4, 1), IPAddress(255, 255, 255, 0));
+        WiFi.softAP("BruceWardrive");
+        beginDashboard();
+    } else {
+        WiFi.mode(WIFI_STA);
+        WiFi.disconnect();
+    }
+}
+
+void Wardriving::beginDashboard() {
+    static AsyncWebServer server(80);
+    server.reset();
+    server.on("/", HTTP_GET, [this](AsyncWebServerRequest *request) {
+        request->send(200, "text/html", dashboardHtml());
+    });
+    server.on("/status", HTTP_GET, [this](AsyncWebServerRequest *request) {
+        request->send(200, "application/json", dashboardJson());
+    });
+    server.begin();
+    dashboardReady = true;
+}
+
+String Wardriving::dashboardHtml() {
+    return "<!DOCTYPE html><html><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">"
+           "<title>Wardrive Live</title><style>"
+           "body{background:#000;color:#0f0;font-family:monospace;font-size:22px;padding:14px;margin:0}"
+           ".cam{font-size:56px;color:#ff0;font-weight:bold;text-align:center}"
+           ".alert{background:#900;color:#fff;padding:12px;border-radius:10px;margin:10px 0;text-align:center;min-height:1.2em}"
+           "table{width:100%;border-collapse:collapse;margin-top:8px}"
+           "td{padding:8px 6px;border-bottom:1px solid #222}"
+           "td:nth-child(2){text-align:right;color:#fff}"
+           "</style></head><body>"
+           "<div class=\"cam\" id=\"cam\">CAMERAS: --</div>"
+           "<div class=\"alert\" id=\"last\">waiting...</div>"
+           "<table id=\"t\"></table>"
+           "<script>"
+           "function load(){fetch('/status').then(r=>r.json()).then(function(d){"
+           "document.getElementById('cam').textContent='CAMERAS: '+d.cameras;"
+           "var l='';if(d.last)l='ALERT: '+d.last;"
+           "document.getElementById('last').textContent=l;"
+           "var h='';h+='<tr><td>GPS</td><td>'+d.lat+' , '+d.lon+'</td></tr>';"
+           "h+='<tr><td>Fix / Sats</td><td>'+(d.fix?'FIX':'NO FIX')+' / '+d.sats+'</td></tr>';"
+           "h+='<tr><td>Speed</td><td>'+d.speed+' km/h</td></tr>';"
+           "h+='<tr><td>Distance</td><td>'+d.distance+' km</td></tr>';"
+           "h+='<tr><td>Session</td><td>'+d.time+'</td></tr>';"
+           "h+='<tr><td>WiFi / BLE seen</td><td>'+d.wifi+' / '+d.ble+'</td></tr>';"
+           "document.getElementById('t').innerHTML=h;"
+           "}).catch(function(){document.getElementById('last').textContent='reconnecting...';})}"
+           "setInterval(load,1000);load();"
+           "</script></body></html>";
+}
+
+String Wardriving::dashboardJson() {
+    String json = "{\"cameras\":" + String(cameraCount);
+    json += ",\"last\":\"" + lastAlert + "\"";
+    json += ",\"lat\":\"" + String(cur_lat, 6) + "\"";
+    json += ",\"lon\":\"" + String(cur_lng, 6) + "\"";
+    json += ",\"fix\":" + String(gps.location.isValid() ? "true" : "false");
+    json += ",\"sats\":" + String(gps.satellites.value());
+    json += ",\"speed\":" + String(gps.speed.kmph());
+    json += ",\"distance\":\"" + String(distance / 1000.0, 2) + "\"";
+    uint32_t s = (millis() - sessionStartMs) / 1000;
+    json += ",\"time\":\"" + String(s / 3600) + ":" + String((s % 3600) / 60) + ":" + String(s % 60) + "\"";
+    json += ",\"wifi\":" + String(wifiNetworkCount);
+    json += ",\"ble\":" + String(bluetoothDeviceCount);
+    json += "}";
+    return json;
 }
 
 bool Wardriving::begin_gps() {
@@ -177,8 +375,10 @@ void Wardriving::display_banner() {
     if (scanBLE) txt += " BLE: " + String(bluetoothDeviceCount);
     padprint(txt);
     if (foundMACAddressCount) padprint(" Alert: " + String(foundMACAddressCount));
+    padprint("  Cameras: " + String(cameraCount));
 
     padprintln("");
+    if (dashboardReady) padprintln("Phone: join AP BruceWardrive -> http://192.168.4.1");
     uint32_t elapsedMs = millis() - sessionStartMs;
     uint32_t elapsedSeconds = elapsedMs / 1000;
     uint32_t hours = elapsedSeconds / 3600;
@@ -299,7 +499,7 @@ void Wardriving::scanWiFiBLE() {
                 file.print(buffer);
 
                 // Check for alert
-                checkForAlert(macAddress, "WiFi", WiFi.SSID(i));
+                checkForAlert(macAddress, "WiFi", WiFi.SSID(i), WiFi.RSSI(i));
 
                 wifiNetworkCount++;
             }
@@ -407,7 +607,7 @@ void Wardriving::scanWiFiBLE() {
                 file.print(buffer);
 
                 // Check for alert
-                checkForAlert(address, "BLE", name);
+                checkForAlert(address, "BLE", name, rssi);
 
                 bluetoothDeviceCount++;
             }
@@ -509,22 +709,63 @@ void Wardriving::releasePins() {
     }
 }
 
-void Wardriving::checkForAlert(const String &macAddress, const String &deviceType, const String &deviceName) {
+void Wardriving::checkForAlert(const String &macAddress, const String &deviceType, const String &deviceName, int32_t rssi) {
+    if (!bruceConfig.wardriveAlert) return;
+    if (rssi < bruceConfig.wardriveMinRssi) return;
+
     String macLower = macAddress;
     macLower.toLowerCase();
+    String reason = "";
+    String nameLower = deviceName;
+    nameLower.toLowerCase();
 
-    if (alertMACs.find(macLower) != alertMACs.end()) {
-        String alertMsg = "ALERT: " + deviceType + " found!";
-        if (deviceName.length() > 0) { alertMsg += " Name: " + deviceName; }
-        alertMsg += " MAC: " + macAddress;
-
-        foundMACAddressCount++;
-
-        displayError(alertMsg.c_str());
-
-        // Brief delay to make alert visible
-        vTaskDelay(2000 / portTICK_PERIOD_MS);
+    // OUI prefix match (first 8 chars "XX:XX:XX")
+    if (macAddress.length() >= 8) {
+        String oui = macAddress.substring(0, 8);
+        oui.toUpperCase();
+        for (const auto &c : cameraOuis) {
+            if (oui == c.prefix) {
+                if (strcmp(c.name, "Flock Safety") == 0) {
+                    if (bruceConfig.wardriveAlertFlockOui) reason = String("FLOCK: ") + c.name;
+                } else {
+                    if (bruceConfig.wardriveAlertCameraOui) reason = String("CAM: ") + c.name;
+                }
+                break;
+            }
+        }
     }
+
+    // SSID substring match (case-insensitive), e.g. "flock"
+    if (reason.isEmpty() && bruceConfig.wardriveAlertFlockSsid) {
+        for (const char *s : cameraSsids) {
+            if (nameLower.indexOf(s) != -1) {
+                reason = String("FLOCK: SSID ") + deviceName;
+                break;
+            }
+        }
+    }
+
+    // User's own exact-MAC alert list from alert.txt
+    if (reason.isEmpty() && alertMACs.find(macLower) != alertMACs.end()) {
+        reason = String("MAC: ") + macAddress;
+    }
+
+    if (reason.isEmpty()) return;
+
+    cameraCount++;
+    lastAlert = reason + " " + macAddress + " " + String(rssi) + "dBm";
+    lastAlertLat = cur_lat;
+    lastAlertLng = cur_lng;
+
+    String alertMsg = "ALERT: " + reason;
+    if (deviceName.length() > 0) alertMsg += " Name: " + deviceName;
+    alertMsg += " MAC: " + macAddress + " RSSI: " + String(rssi);
+
+    foundMACAddressCount++;
+    displayError(alertMsg.c_str());
+
+    // Brief delay to make alert visible
+    vTaskDelay(2000 / portTICK_PERIOD_MS);
 }
 
 void Wardriving::restorePins() {
@@ -557,3 +798,4 @@ void Wardriving::restorePins() {
         rxPinReleased = false;
     }
 }
+
