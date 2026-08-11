@@ -79,6 +79,7 @@ public:
     bool wardriveAlertFlockSsid = true; // SSID containing "flock"
     int wardriveMinRssi = -90;          // ignore weaker signals
     bool wardriveDashboard = true;      // phone dashboard AP "BruceWardrive"
+    bool wardriveVibrate = true;        // vibrate phone on alert (browser Vibration API)
 
     void setWifiMAC(const String &mac) {
         wifiMAC = mac;

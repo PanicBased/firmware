@@ -65,6 +65,7 @@ JsonDocument BruceConfig::toJson() const {
     setting["wardriveAlertFlockSsid"] = wardriveAlertFlockSsid;
     setting["wardriveMinRssi"] = wardriveMinRssi;
     setting["wardriveDashboard"] = wardriveDashboard;
+    setting["wardriveVibrate"] = wardriveVibrate;
 
 
     JsonObject _wifi = setting["wifi"].to<JsonObject>();
@@ -351,6 +352,7 @@ void BruceConfig::fromFile(bool checkFS) {
     if (!setting["wardriveAlertFlockSsid"].isNull()) wardriveAlertFlockSsid = setting["wardriveAlertFlockSsid"].as<bool>();
     if (!setting["wardriveMinRssi"].isNull()) wardriveMinRssi = setting["wardriveMinRssi"].as<int>();
     if (!setting["wardriveDashboard"].isNull()) wardriveDashboard = setting["wardriveDashboard"].as<bool>();
+    if (!setting["wardriveVibrate"].isNull()) wardriveVibrate = setting["wardriveVibrate"].as<bool>();
 
     if (!setting["evilWifiPasswordMode"].isNull()) {
         int mode = setting["evilWifiPasswordMode"].as<int>();

@@ -227,37 +227,89 @@ void Wardriving::beginDashboard() {
 
 String Wardriving::dashboardHtml() {
     return "<!DOCTYPE html><html><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">"
-           "<title>Wardrive Live</title><style>"
-           "body{background:#000;color:#0f0;font-family:monospace;font-size:22px;padding:14px;margin:0}"
-           ".cam{font-size:56px;color:#ff0;font-weight:bold;text-align:center}"
-           ".alert{background:#900;color:#fff;padding:12px;border-radius:10px;margin:10px 0;text-align:center;min-height:1.2em}"
-           "table{width:100%;border-collapse:collapse;margin-top:8px}"
-           "td{padding:8px 6px;border-bottom:1px solid #222}"
-           "td:nth-child(2){text-align:right;color:#fff}"
+           "<title>PANICflock</title><style>"
+           ":root{--bg:#05070d;--amber:#ffb03a;--teal:#2de2e6;--txt:#ffd9a0;--dim:#7a8496;--line:#1c2733}"
+           "*{margin:0;padding:0;box-sizing:border-box}"
+           "body{background:var(--bg);color:var(--txt);font-family:Consolas,Menlo,'Courier New',monospace;font-size:18px;padding:16px;min-height:100vh}"
+           "body::before{content:\"\";position:fixed;inset:0;background:repeating-linear-gradient(0deg,rgba(0,0,0,.22) 0 1px,transparent 1px 3px);pointer-events:none;z-index:99}"
+           ".head{display:flex;justify-content:space-between;align-items:baseline;border-bottom:1px solid var(--line);padding-bottom:8px}"
+           "h1{color:var(--amber);font-size:30px;letter-spacing:4px;text-shadow:0 0 12px rgba(255,176,58,.55);font-weight:700}"
+           ".chan{color:var(--teal);font-size:12px;letter-spacing:2px}"
+           ".hits{text-align:center;margin:22px 0 8px}"
+           ".hits .num{font-size:88px;color:var(--amber);font-weight:700;text-shadow:0 0 22px rgba(255,176,58,.5);line-height:1}"
+           ".hits .lab{color:var(--teal);letter-spacing:6px;font-size:14px}"
+           ".alert{min-height:34px;text-align:center;font-size:15px;color:var(--teal);padding:8px;border:1px solid var(--line);border-radius:6px;margin:10px 0}"
+           ".alert.flash{animation:blink .6s step-end 3}"
+           "@keyframes blink{50%{background:var(--teal);color:#000}}"
+           "table{width:100%;border-collapse:collapse;margin-top:10px;font-size:15px}"
+           "td{padding:7px 4px;border-bottom:1px solid var(--line)}"
+           "td:first-child{color:var(--dim);letter-spacing:2px}"
+           "td:nth-child(2){text-align:right;color:var(--amber)}"
+           "a{color:var(--teal);text-decoration:none}"
+           ".recent{margin-top:14px;border:1px solid var(--line);border-radius:6px;padding:10px}"
+           ".recent h2{color:var(--teal);font-size:12px;letter-spacing:3px;margin-bottom:6px}"
+           ".recent div{font-size:13px;color:var(--amber);padding:3px 0;border-bottom:1px dashed var(--line)}"
+           ".recent div:last-child{border-bottom:none}"
+           ".foot{text-align:center;color:var(--dim);font-size:11px;letter-spacing:3px;margin-top:16px}"
+           ".foot .cur{animation:blink2 1s step-end infinite}"
+           "@keyframes blink2{50%{opacity:0}}"
            "</style></head><body>"
-           "<div class=\"cam\" id=\"cam\">CAMERAS: --</div>"
-           "<div class=\"alert\" id=\"last\">waiting...</div>"
+           "<div class=\"head\"><h1>PANICflock</h1><span class=\"chan\">SECTOR SCAN</span></div>"
+           "<div class=\"hits\"><div class=\"num\" id=\"hits\">--</div><div class=\"lab\">SIGHTINGS</div></div>"
+           "<div class=\"alert\" id=\"alert\">acquiring signal...</div>"
            "<table id=\"t\"></table>"
+           "<div class=\"recent\"><h2>RECENT HITS</h2><div id=\"recent\">none</div></div>"
+           "<div class=\"foot\"><span class=\"cur\">&#9617;</span> WARDEN ONLINE <span class=\"cur\">&#9617;</span></div>"
            "<script>"
+           "function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}"
            "function load(){fetch('/status').then(r=>r.json()).then(function(d){"
-           "document.getElementById('cam').textContent='CAMERAS: '+d.cameras;"
-           "var l='';if(d.last)l='ALERT: '+d.last;"
-           "document.getElementById('last').textContent=l;"
-           "var h='';h+='<tr><td>GPS</td><td>'+d.lat+' , '+d.lon+'</td></tr>';"
-           "h+='<tr><td>Fix / Sats</td><td>'+(d.fix?'FIX':'NO FIX')+' / '+d.sats+'</td></tr>';"
-           "h+='<tr><td>Speed</td><td>'+d.speed+' km/h</td></tr>';"
-           "h+='<tr><td>Distance</td><td>'+d.distance+' km</td></tr>';"
-           "h+='<tr><td>Session</td><td>'+d.time+'</td></tr>';"
-           "h+='<tr><td>WiFi / BLE seen</td><td>'+d.wifi+' / '+d.ble+'</td></tr>';"
+           "document.getElementById('hits').textContent=d.hits;"
+           "var a=document.getElementById('alert');"
+           "a.textContent=d.last?('ALERT :: '+d.last):'no hits yet';"
+           "if(d.new){a.classList.add('flash');if(navigator.vibrate&&d.vibrate)navigator.vibrate([90,60,140]);setTimeout(function(){a.classList.remove('flash')},2000)}"
+           "var h='';"
+           "h+='<tr><td>LAT</td><td>'+d.lat+'</td></tr>';"
+           "h+='<tr><td>LON</td><td>'+d.lon+'</td></tr>';"
+           "h+='<tr><td>FIX / SATS</td><td>'+(d.fix?'FIX':'NO FIX')+' / '+d.sats+'</td></tr>';"
+           "h+='<tr><td>SPEED</td><td>'+d.speed+' km/h</td></tr>';"
+           "h+='<tr><td>DISTANCE</td><td>'+d.distance+' km</td></tr>';"
+           "h+='<tr><td>SESSION</td><td>'+d.time+'</td></tr>';"
+           "h+='<tr><td>LAST RSSI</td><td>'+(d.rssi?d.rssi+' dBm':'--')+'</td></tr>';"
+           "h+='<tr><td>WIFI / BLE</td><td>'+d.wifi+' / '+d.ble+'</td></tr>';"
+           "h+='<tr><td>MAP</td><td><a href=\"https://www.google.com/maps?q='+d.lat+','+d.lon+'\" target=\"_blank\">OPEN &#8599;</a></td></tr>';"
            "document.getElementById('t').innerHTML=h;"
-           "}).catch(function(){document.getElementById('last').textContent='reconnecting...';})}"
+           "var r='';"
+           "for(var i=0;i<d.recent.length;i++){r+='<div>'+esc(d.recent[i])+'</div>'}"
+           "document.getElementById('recent').innerHTML=r||'none';"
+           "}).catch(function(){document.getElementById('alert').textContent='signal lost - reacquiring';})}"
            "setInterval(load,1000);load();"
            "</script></body></html>";
 }
 
+static String jsonEscape(const String &in) {
+    String out;
+    for (size_t i = 0; i < in.length(); i++) {
+        char c = in[i];
+        switch (c) {
+            case '"': out += "\\\""; break;
+            case '\\': out += "\\\\"; break;
+            case '\n': out += "\\n"; break;
+            case '\r': break;
+            default: out += c;
+        }
+    }
+    return out;
+}
+
 String Wardriving::dashboardJson() {
-    String json = "{\"cameras\":" + String(cameraCount);
-    json += ",\"last\":\"" + lastAlert + "\"";
+    bool isNew = (cameraCount != lastReportedHits);
+    if (isNew) lastReportedHits = cameraCount;
+
+    String json = "{\"hits\":" + String(cameraCount);
+    json += ",\"new\":" + String(isNew ? "true" : "false");
+    json += ",\"vibrate\":" + String(bruceConfig.wardriveVibrate ? "true" : "false");
+    json += ",\"last\":\"" + jsonEscape(lastAlert) + "\"";
+    json += ",\"rssi\":" + String(lastAlertRssi);
     json += ",\"lat\":\"" + String(cur_lat, 6) + "\"";
     json += ",\"lon\":\"" + String(cur_lng, 6) + "\"";
     json += ",\"fix\":" + String(gps.location.isValid() ? "true" : "false");
@@ -268,7 +320,12 @@ String Wardriving::dashboardJson() {
     json += ",\"time\":\"" + String(s / 3600) + ":" + String((s % 3600) / 60) + ":" + String(s % 60) + "\"";
     json += ",\"wifi\":" + String(wifiNetworkCount);
     json += ",\"ble\":" + String(bluetoothDeviceCount);
-    json += "}";
+    json += ",\"recent\":[";
+    for (size_t i = 0; i < recentAlerts.size(); i++) {
+        if (i) json += ",";
+        json += "\"" + jsonEscape(recentAlerts[i]) + "\"";
+    }
+    json += "]}";
     return json;
 }
 
@@ -366,7 +423,7 @@ void Wardriving::set_position() {
 }
 
 void Wardriving::display_banner() {
-    drawMainBorderWithTitle("Wardriving");
+    drawMainBorderWithTitle("PANICflock");
 
     padprintln("");
     if (filename != "") padprintln("File: " + filename.substring(0, filename.length() - 4));
@@ -375,7 +432,7 @@ void Wardriving::display_banner() {
     if (scanBLE) txt += " BLE: " + String(bluetoothDeviceCount);
     padprint(txt);
     if (foundMACAddressCount) padprint(" Alert: " + String(foundMACAddressCount));
-    padprint("  Cameras: " + String(cameraCount));
+    padprint("  Hits: " + String(cameraCount));
 
     padprintln("");
     if (dashboardReady) padprintln("Phone: join AP BruceWardrive -> http://192.168.4.1");
@@ -756,16 +813,21 @@ void Wardriving::checkForAlert(const String &macAddress, const String &deviceTyp
     lastAlert = reason + " " + macAddress + " " + String(rssi) + "dBm";
     lastAlertLat = cur_lat;
     lastAlertLng = cur_lng;
+    lastAlertRssi = rssi;
+    recentAlerts.push_back(lastAlert);
+    if (recentAlerts.size() > 5) recentAlerts.erase(recentAlerts.begin());
 
     String alertMsg = "ALERT: " + reason;
     if (deviceName.length() > 0) alertMsg += " Name: " + deviceName;
     alertMsg += " MAC: " + macAddress + " RSSI: " + String(rssi);
+    padprintln(alertMsg);
 
     foundMACAddressCount++;
-    displayError(alertMsg.c_str());
 
-    // Brief delay to make alert visible
-    vTaskDelay(2000 / portTICK_PERIOD_MS);
+    // Invert-blink instead of red flash (two flips = returns to original state)
+    tft.invertDisplay(true);
+    vTaskDelay(700 / portTICK_PERIOD_MS);
+    tft.invertDisplay(false);
 }
 
 void Wardriving::restorePins() {

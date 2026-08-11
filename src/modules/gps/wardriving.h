@@ -15,6 +15,7 @@
 #include <esp_wifi_types.h>
 #include <globals.h>
 #include <set>
+#include <vector>
 
 class Wardriving {
 public:
@@ -54,9 +55,12 @@ private:
     // Camera-mapping / dashboard state
     int cameraCount = 0;          // total camera sightings this session
     String lastAlert = "";        // human readable last alert (reason + mac + rssi)
+    int lastAlertRssi = 0;        // RSSI of the last alert
     double lastAlertLat = 0;      // coords of last alert
     double lastAlertLng = 0;
     bool dashboardReady = false;  // softAP + web server up
+    int lastReportedHits = 0;     // for detecting new alerts between dashboard polls
+    std::vector<String> recentAlerts; // last 5 alerts for the dashboard list
 
     bool rxPinReleased = false;
 
