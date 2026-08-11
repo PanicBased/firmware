@@ -283,7 +283,8 @@ String Wardriving::dashboardHtml() {
            "h+='<tr><td>DISTANCE</td><td>'+d.distance+' km</td></tr>';"
            "h+='<tr><td>SESSION</td><td>'+d.time+'</td></tr>';"
            "h+='<tr><td>LAST RSSI</td><td>'+(d.rssi?d.rssi+' dBm':'--')+'</td></tr>';"
-           "h+='<tr><td>WIFI / BLE</td><td>'+d.wifi+' / '+d.ble+'</td></tr>';"
+            "h+='<tr><td>WIFI / BLE</td><td>'+d.wifi+' / '+d.ble+'</td></tr>';"
+            "h+='<tr><td>NEXT SCAN</td><td>'+d.nextScan+'s / '+(d.mode==='COMMS'?'4s':'1s')+'</td></tr>';"
            "h+='<tr><td>MAP</td><td><a href=\"https://www.google.com/maps?q='+d.lat+','+d.lon+'\" target=\"_blank\">OPEN &#8599;</a></td></tr>';"
            "document.getElementById('t').innerHTML=h;"
            "var r='';"
@@ -328,6 +329,12 @@ String Wardriving::dashboardJson() {
     json += ",\"time\":\"" + String(s / 3600) + ":" + String((s % 3600) / 60) + ":" + String(s % 60) + "\"";
     json += ",\"wifi\":" + String(wifiNetworkCount);
     json += ",\"ble\":" + String(bluetoothDeviceCount);
+    unsigned long scanInterval =
+        WiFi.softAPgetStationNum() > 0 ? WIFI_SCAN_INTERVAL_MS : WIFI_SCAN_SPRINT_MS;
+    long nextScanMs = (long)(lastWifiScanMs + scanInterval) - (long)millis();
+    if (nextScanMs < 0) nextScanMs = 0;
+    json += ",\"nextScan\":" + String((nextScanMs + 999) / 1000);
+    json += ",\"mode\":\"" + String(WiFi.softAPgetStationNum() > 0 ? "COMMS" : "SPRINT") + "\"";
     json += ",\"recent\":[";
     for (size_t i = 0; i < recentAlerts.size(); i++) {
         if (i) json += ",";
