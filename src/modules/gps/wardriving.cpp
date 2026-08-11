@@ -530,8 +530,11 @@ void Wardriving::scanWiFiBLE() {
     // ~continuously and the AP was effectively invisible.
     int networksFound = 0;
     bool wifiScanned = false;
-    if (scanWiFi &&
-        (lastWifiScanMs == 0 || (millis() - lastWifiScanMs >= WIFI_SCAN_INTERVAL_MS))) {
+    // Sprint at 1s when nobody is watching; drop to 4s while a dashboard
+    // client is connected so the softAP gets enough quiet airtime to serve it.
+    unsigned long scanInterval =
+        WiFi.softAPgetStationNum() > 0 ? WIFI_SCAN_INTERVAL_MS : WIFI_SCAN_SPRINT_MS;
+    if (scanWiFi && (lastWifiScanMs == 0 || (millis() - lastWifiScanMs >= scanInterval))) {
         lastWifiScanMs = millis();
         networksFound = scanWiFiNetworks();
         wifiScanned = true;
