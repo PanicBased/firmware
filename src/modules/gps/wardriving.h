@@ -63,7 +63,7 @@ private:
     static constexpr size_t MAX_REGISTERED_MACS = 250;
 
     unsigned long lastWifiScanMs = 0; // last WiFi scan start (AP visibility throttle)
-    static constexpr unsigned long WIFI_SCAN_INTERVAL_MS = 4000; // AP client connected: keep dashboard reachable
+    static constexpr unsigned long WIFI_SCAN_INTERVAL_MS = 2000; // AP client connected: keep dashboard reachable
     static constexpr unsigned long WIFI_SCAN_SPRINT_MS = 1000;  // no client: max detection cadence
 
     // Camera-mapping / dashboard state
@@ -77,6 +77,9 @@ private:
     std::vector<CameraHit> hitLog; // recent confirmed sightings (newest last)
 
     bool rxPinReleased = false;
+
+    bool alertFlashing = false;        // true while the invert-blink is active
+    unsigned long alertFlashUntil = 0; // millis() when the invert-blink should end
 
     /////////////////////////////////////////////////////////////////////////////////////
     // Setup

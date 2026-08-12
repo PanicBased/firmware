@@ -311,7 +311,7 @@ String Wardriving::dashboardHtml() {
            "var a=document.getElementById('alert');"
            "a.textContent=d.last?('ALERT :: '+d.last):'no hits yet';"
            "if(d.new){a.classList.add('flash');if(navigator.vibrate&&d.vibrate)navigator.vibrate([90,60,140]);setTimeout(function(){a.classList.remove('flash')},2000)}"
-            "var m=[['LAT',d.lat],['LON',d.lon],['FIX / SATS',(d.fix?'FIX':'NO FIX')+' / '+d.sats],['SPEED',d.speed+' km/h'],['DISTANCE',d.distance+' km'],['SESSION',d.time],['LAST RSSI',d.rssi?d.rssi+' dBm':'--'],['WIFI / BLE',d.wifi+' / '+d.ble],['NEXT SCAN',d.nextScan+'s / '+(d.mode==='COMMS'?'4s':'1s')]];"
+            "var m=[['LAT',d.lat],['LON',d.lon],['FIX / SATS',(d.fix?'FIX':'NO FIX')+' / '+d.sats],['SPEED',d.speed+' km/h'],['DISTANCE',d.distance+' km'],['SESSION',d.time],['LAST RSSI',d.rssi?d.rssi+' dBm':'--'],['WIFI / BLE',d.wifi+' / '+d.ble],['NEXT SCAN',d.nextScan+'s / '+(d.mode==='COMMS'?'2s':'1s')]];"
             "var c='';"
             "for(var j=0;j<m.length;j++){c+='<div class=\"card\"><div class=\"k\">'+m[j][0]+'</div><div class=\"v\">'+m[j][1]+'</div></div>'}"
             "c+='<div class=\"card map\"><div class=\"k\">MAP</div><div class=\"v\"><a href=\"https://www.google.com/maps?q='+d.lat+','+d.lon+'\" target=\"_blank\">OPEN &#8599;</a></div></div>';"
@@ -419,6 +419,10 @@ void Wardriving::loop() {
     int count = 0;
     returnToMenu = false;
     while (1) {
+        if (alertFlashing && millis() >= alertFlashUntil) {
+            alertFlashing = false;
+            tft.invertDisplay(false);
+        }
         display_banner();
 
         if (GPSserial.available() > 0) {
@@ -571,7 +575,7 @@ void Wardriving::scanWiFiBLE() {
     // ~continuously and the AP was effectively invisible.
     int networksFound = 0;
     bool wifiScanned = false;
-    // Sprint at 1s when nobody is watching; drop to 4s while a dashboard
+    // Sprint at 1s when nobody is watching; drop to 2s while a dashboard
     // client is connected so the softAP gets enough quiet airtime to serve it.
     unsigned long scanInterval =
         WiFi.softAPgetStationNum() > 0 ? WIFI_SCAN_INTERVAL_MS : WIFI_SCAN_SPRINT_MS;
@@ -902,10 +906,15 @@ void Wardriving::checkForAlert(const String &macAddress, const String &deviceTyp
 
     foundMACAddressCount++;
 
-    // Invert-blink instead of red flash (two flips = returns to original state)
-    tft.invertDisplay(true);
-    vTaskDelay(700 / portTICK_PERIOD_MS);
-    tft.invertDisplay(false);
+    // Single-shot invert-blink, restored from loop(). The old
+    // "invert -> delay -> un-invert" sequence could get left stuck when
+    // alerts re-fire faster than 700ms, because each re-entry cancelled
+    // the previous un-invert and the last flash never got its "off" flip.
+    if (!alertFlashing) {
+        alertFlashing = true;
+        alertFlashUntil = millis() + 700;
+        tft.invertDisplay(true);
+    }
 }
 
 void Wardriving::restorePins() {

@@ -197,9 +197,19 @@ bool wifi_atk_setWifi() {
     wifi_complete_cleanup();
 
     if (WiFi.getMode() != WIFI_MODE_APSTA) {
-        if (!WiFi.mode(WIFI_MODE_APSTA)) {
-            displayError("Failed starting WIFI", true);
-            return false;
+        bool apstaOk = WiFi.mode(WIFI_MODE_APSTA);
+        if (!apstaOk) {
+            // A fresh APSTA bring-up right after a full driver teardown
+            // (e.g. leaving the GPS/wardriving app) can transiently fail.
+            // Reset the driver and retry once before giving up.
+            size_t heap = ESP.getFreeHeap();
+            WiFi.mode(WIFI_OFF);
+            vTaskDelay(pdMS_TO_TICKS(200));
+            apstaOk = WiFi.mode(WIFI_MODE_APSTA);
+            if (!apstaOk) {
+                displayError("Failed starting WIFI heap=" + String(heap), true);
+                return false;
+            }
         }
         vTaskDelay(pdMS_TO_TICKS(100));
     }
