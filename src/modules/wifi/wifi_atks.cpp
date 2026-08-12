@@ -194,36 +194,35 @@ static bool wifi_atk_bringupAPSTA() {
     // Use the smaller static-buffer WiFi driver config so esp_wifi_init fits in
     // the heap left over from heavy sessions (e.g. wardriving).
     WiFi.useStaticBuffers(true);
-    esp_wifi_stop();
+    // Tear down whatever the previous app left behind. Raw esp_wifi_* calls (and
+    // the core's own teardown) can leave the driver inited+started while Arduino
+    // thinks it is off, so every return code matters here.
+    esp_err_t stopErr = esp_wifi_stop();
     vTaskDelay(pdMS_TO_TICKS(100));
-    esp_wifi_deinit();
+    esp_err_t deinitErr = esp_wifi_deinit();
     vTaskDelay(pdMS_TO_TICKS(200));
-    // Core 3.x tears down the wifi driver before releasing its esp_netifs, so
-    // after heavy wifi use a stale WIFI_AP_DEF/WIFI_STA_DEF netif stays behind;
-    // the next esp_netif_create_default_wifi_* then returns NULL and WiFi.mode()
-    // fails at esp_netif_set_hostname. Drop leftovers so interfaces are recreated.
+    // Drop any netifs the core leaked so a later Arduino init recreates them cleanly.
     esp_netif_t *stale = esp_netif_get_handle_from_ifkey("WIFI_AP_DEF");
     if (stale) esp_netif_destroy(stale);
     stale = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
     if (stale) esp_netif_destroy(stale);
     vTaskDelay(pdMS_TO_TICKS(100));
-    if (!WiFi.mode(WIFI_MODE_APSTA)) {
-        String why = "heap=" + String(ESP.getFreeHeap());
-        esp_wifi_stop();
-        vTaskDelay(pdMS_TO_TICKS(100));
-        esp_wifi_deinit();
-        vTaskDelay(pdMS_TO_TICKS(200));
-        wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
-        esp_err_t e1 = esp_wifi_init(&cfg);
-        if (e1 == ESP_OK) {
-            esp_err_t e2 = esp_wifi_set_mode(WIFI_MODE_APSTA);
-            esp_err_t e3 = esp_wifi_start();
-            why += " init=ok mode=0x" + String((int)e2, HEX) + " start=0x" + String((int)e3, HEX);
-            esp_wifi_stop();
-            esp_wifi_deinit();
-        } else {
-            why += " init=0x" + String((int)e1, HEX) + "(" + String(esp_err_to_name(e1)) + ")";
-        }
+    // Bring the driver up directly. esp_wifi_init is a no-op (returns ESP_OK) if the
+    // driver is still inited, so clear the mode with NULL before switching to APSTA;
+    // set_mode(NULL) is the sanctioned way to take a running/wedged driver down.
+    wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
+    esp_err_t initErr = esp_wifi_init(&cfg);
+    vTaskDelay(pdMS_TO_TICKS(100));
+    esp_err_t nullErr = esp_wifi_set_mode(WIFI_MODE_NULL);
+    vTaskDelay(pdMS_TO_TICKS(100));
+    esp_err_t modeErr = esp_wifi_set_mode(WIFI_MODE_APSTA);
+    vTaskDelay(pdMS_TO_TICKS(100));
+    esp_err_t startErr = esp_wifi_start();
+    if (initErr != ESP_OK || modeErr != ESP_OK || startErr != ESP_OK) {
+        String why = "heap=" + String(ESP.getFreeHeap()) + " stop=0x" + String((int)stopErr, HEX)
+                     + " deinit=0x" + String((int)deinitErr, HEX) + " init=0x" + String((int)initErr, HEX)
+                     + " null=0x" + String((int)nullErr, HEX) + " mode=0x" + String((int)modeErr, HEX)
+                     + " start=0x" + String((int)startErr, HEX);
         displayError("Failed starting WIFI " + why, true);
         return false;
     }
