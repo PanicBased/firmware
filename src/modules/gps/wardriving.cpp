@@ -13,6 +13,7 @@
 #include "core/sd_functions.h"
 #include "core/wifi/wifi_common.h"
 #include "current_year.h"
+#include "esp_wifi.h"
 #include "modules/ble/ble_common.h"
 #include <ESPAsyncWebServer.h>
 #include <cctype>
@@ -402,7 +403,13 @@ bool Wardriving::begin_gps() {
 }
 
 void Wardriving::end() {
-    if (scanWiFi) wifiDisconnect();
+    if (scanWiFi) {
+        wifiDisconnect();
+        // wifiDisconnect() only stops the driver; fully deinit it so the next
+        // app that brings WiFi up (e.g. Beacon SPAM) can init cleanly instead
+        // of failing with ESP_ERR_WIFI_INIT_STATE.
+        esp_wifi_deinit();
+    }
     if (scanBLE) {
         BLEDevice::deinit(true);
         pBLEScan = nullptr;
