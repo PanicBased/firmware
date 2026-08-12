@@ -205,7 +205,8 @@ bool wifi_atk_setWifi() {
         esp_wifi_deinit();
         vTaskDelay(pdMS_TO_TICKS(200));
 
-        esp_err_t err = esp_wifi_init(&WIFI_INIT_CONFIG_DEFAULT());
+        wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
+        esp_err_t err = esp_wifi_init(&cfg);
         if (err != ESP_OK) {
             displayError("WIFI init 0x" + String((int)err, HEX) + " heap=" + String(ESP.getFreeHeap()), true);
             return false;
