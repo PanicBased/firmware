@@ -197,8 +197,16 @@ bool wifi_atk_setWifi() {
     wifi_complete_cleanup();
 
     if (WiFi.getMode() != WIFI_MODE_APSTA) {
+        // Use the smaller static-buffer WiFi driver config so esp_wifi_init fits in
+        // the heap left over from heavy sessions (e.g. wardriving), and guarantee the
+        // driver is fully torn down before bringing it up fresh.
+        WiFi.useStaticBuffers(true);
+        esp_wifi_stop();
+        vTaskDelay(pdMS_TO_TICKS(100));
+        esp_wifi_deinit();
+        vTaskDelay(pdMS_TO_TICKS(300));
         if (!WiFi.mode(WIFI_MODE_APSTA)) {
-            displayError("Failed starting WIFI", true);
+            displayError("Failed starting WIFI heap=" + String(ESP.getFreeHeap()), true);
             return false;
         }
         vTaskDelay(pdMS_TO_TICKS(100));
@@ -483,8 +491,13 @@ void capture_handshake(const String &tssid, const String &mac, uint8_t channel) 
 
     wifi_complete_cleanup();
 
+    WiFi.useStaticBuffers(true);
+    esp_wifi_stop();
+    vTaskDelay(pdMS_TO_TICKS(100));
+    esp_wifi_deinit();
+    vTaskDelay(pdMS_TO_TICKS(300));
     if (!WiFi.mode(WIFI_MODE_APSTA)) {
-        displayError("Failed starting WIFI", true);
+        displayError("Failed starting WIFI heap=" + String(ESP.getFreeHeap()), true);
         return;
     }
     vTaskDelay(pdMS_TO_TICKS(100));
