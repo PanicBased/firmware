@@ -197,28 +197,8 @@ bool wifi_atk_setWifi() {
     wifi_complete_cleanup();
 
     if (WiFi.getMode() != WIFI_MODE_APSTA) {
-        // A previous app (e.g. GPS/wardriving) can leave the wifi driver
-        // initialized-but-stopped. Arduino's WiFi.mode() then fails to re-init
-        // it with ESP_ERR_WIFI_INIT_STATE. Fully deinit and bring the driver
-        // back up from scratch, surfacing the real error code if it still fails.
-        WiFi.mode(WIFI_OFF);
-        esp_wifi_deinit();
-        vTaskDelay(pdMS_TO_TICKS(200));
-
-        wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
-        esp_err_t err = esp_wifi_init(&cfg);
-        if (err != ESP_OK) {
-            displayError("WIFI init 0x" + String((int)err, HEX) + " heap=" + String(ESP.getFreeHeap()), true);
-            return false;
-        }
-        err = esp_wifi_set_mode(WIFI_MODE_APSTA);
-        if (err != ESP_OK) {
-            displayError("WIFI mode 0x" + String((int)err, HEX), true);
-            return false;
-        }
-        err = esp_wifi_start();
-        if (err != ESP_OK) {
-            displayError("WIFI start 0x" + String((int)err, HEX), true);
+        if (!WiFi.mode(WIFI_MODE_APSTA)) {
+            displayError("Failed starting WIFI", true);
             return false;
         }
         vTaskDelay(pdMS_TO_TICKS(100));
