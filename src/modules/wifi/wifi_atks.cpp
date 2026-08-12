@@ -14,6 +14,7 @@
 #include "deauther.h"
 #include "esp_system.h"
 #include "esp_wifi.h"
+#include "esp_netif.h"
 #include "evil_portal.h"
 #include "karma_attack.h"
 #include "sniffer.h"
@@ -189,6 +190,47 @@ void wifi_atk_info(const String &tssid, const String &mac, uint8_t channel) {
     }
 }
 
+static bool wifi_atk_bringupAPSTA() {
+    // Use the smaller static-buffer WiFi driver config so esp_wifi_init fits in
+    // the heap left over from heavy sessions (e.g. wardriving).
+    WiFi.useStaticBuffers(true);
+    esp_wifi_stop();
+    vTaskDelay(pdMS_TO_TICKS(100));
+    esp_wifi_deinit();
+    vTaskDelay(pdMS_TO_TICKS(200));
+    // Core 3.x tears down the wifi driver before releasing its esp_netifs, so
+    // after heavy wifi use a stale WIFI_AP_DEF/WIFI_STA_DEF netif stays behind;
+    // the next esp_netif_create_default_wifi_* then returns NULL and WiFi.mode()
+    // fails at esp_netif_set_hostname. Drop leftovers so interfaces are recreated.
+    esp_netif_t *stale = esp_netif_get_handle_from_ifkey("WIFI_AP_DEF");
+    if (stale) esp_netif_destroy(stale);
+    stale = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
+    if (stale) esp_netif_destroy(stale);
+    vTaskDelay(pdMS_TO_TICKS(100));
+    if (!WiFi.mode(WIFI_MODE_APSTA)) {
+        String why = "heap=" + String(ESP.getFreeHeap());
+        esp_wifi_stop();
+        vTaskDelay(pdMS_TO_TICKS(100));
+        esp_wifi_deinit();
+        vTaskDelay(pdMS_TO_TICKS(200));
+        wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
+        esp_err_t e1 = esp_wifi_init(&cfg);
+        if (e1 == ESP_OK) {
+            esp_err_t e2 = esp_wifi_set_mode(WIFI_MODE_APSTA);
+            esp_err_t e3 = esp_wifi_start();
+            why += " init=ok mode=0x" + String((int)e2, HEX) + " start=0x" + String((int)e3, HEX);
+            esp_wifi_stop();
+            esp_wifi_deinit();
+        } else {
+            why += " init=0x" + String((int)e1, HEX) + "(" + String(esp_err_to_name(e1)) + ")";
+        }
+        displayError("Failed starting WIFI " + why, true);
+        return false;
+    }
+    vTaskDelay(pdMS_TO_TICKS(100));
+    return true;
+}
+
 bool wifi_atk_setWifi() {
     checkHeap("Wifi atk start");
 
@@ -197,19 +239,9 @@ bool wifi_atk_setWifi() {
     wifi_complete_cleanup();
 
     if (WiFi.getMode() != WIFI_MODE_APSTA) {
-        // Use the smaller static-buffer WiFi driver config so esp_wifi_init fits in
-        // the heap left over from heavy sessions (e.g. wardriving), and guarantee the
-        // driver is fully torn down before bringing it up fresh.
-        WiFi.useStaticBuffers(true);
-        esp_wifi_stop();
-        vTaskDelay(pdMS_TO_TICKS(100));
-        esp_wifi_deinit();
-        vTaskDelay(pdMS_TO_TICKS(300));
-        if (!WiFi.mode(WIFI_MODE_APSTA)) {
-            displayError("Failed starting WIFI heap=" + String(ESP.getFreeHeap()), true);
+        if (!wifi_atk_bringupAPSTA()) {
             return false;
         }
-        vTaskDelay(pdMS_TO_TICKS(100));
     }
 
     if (WiFi.softAPSSID() != bruceConfig.wifiAp.ssid && WiFi.softAPSSID() != WIFI_ATK_NAME) {
@@ -491,16 +523,9 @@ void capture_handshake(const String &tssid, const String &mac, uint8_t channel) 
 
     wifi_complete_cleanup();
 
-    WiFi.useStaticBuffers(true);
-    esp_wifi_stop();
-    vTaskDelay(pdMS_TO_TICKS(100));
-    esp_wifi_deinit();
-    vTaskDelay(pdMS_TO_TICKS(300));
-    if (!WiFi.mode(WIFI_MODE_APSTA)) {
-        displayError("Failed starting WIFI heap=" + String(ESP.getFreeHeap()), true);
+    if (!wifi_atk_bringupAPSTA()) {
         return;
     }
-    vTaskDelay(pdMS_TO_TICKS(100));
     esp_wifi_set_storage(WIFI_STORAGE_RAM);
 
     if (!sniffer_prepare_storage(fs, !isLittleFS)) {
